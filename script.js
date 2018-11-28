@@ -1,5 +1,5 @@
 
-//-1, -1    0, -1   1, -1
+//-1, -1     0, -1   1, -1
 //- 1, 0     0, 0    1, 0
 //- 1, 1     0, 1    1, 1
 
@@ -10,25 +10,15 @@
     var boolImg = [[]];
     var bits = [];
     var bitIndex = 0;
-    var buffer = 10.5; // closeness
-    var iterations = 10;
+    var buffer = 1; // closeness
+    var iterations = 7;
+    var ignoreNoicePixcelsIflessersize = 10;
+    var smootThreshold = 6; // if more than smootThreshold sourandings are white, center cell also will be white
+    var numberOfsmoothIteration = 4;
+    var grayscaleThreshold = 100; // half of 256 = 2^8 - need some logic to get for particular image, number of pixcels vs grey scall(0-255)
     var colors = [
-
-        [255, 255, 255],
         [255, 0, 0],
-        [0, 255, 0],
-        [0, 0, 255],
-        [255, 255, 0],
-        [0, 255, 255],
-        [255, 0, 255],
-        [192, 192, 192],
-        [128, 128, 128],
-        [128, 0, 0],
-        [128, 128, 0],
-        [0, 128, 0],
-        [128, 0, 128],
-        [0, 128, 128],
-        [0, 0, 128]
+        [255, 255, 255]
     ];
 
     ccImg.crossOrigin = 'Anonymous';
@@ -57,7 +47,7 @@
         
         for (var i = 0; i < imgPixels.data.length; i += 4) {
             var avg = (imgPixels.data[i] + imgPixels.data[i + 1] + imgPixels.data[i + 2]) / 3;
-            avg = avg >= 128 ? 255 : 0;
+            avg = avg >= grayscaleThreshold ? 255 : 0;
 
         
             var boolVal = avg == 0 ? 0 : 1;
@@ -69,43 +59,56 @@
 
         }
 
-        cxt.putImageData(imgPixels, 0, 0, 0, 0, imgPixels.width, imgPixels.height);
+        drowImg(cxt, imgPixels);
 
 
 
         // fill the gaps / Blur it before applaying skelitons
-        //NOT in use
+        // NOT in use
         // Need improvement
 
-        for (var i = 0; i < imgPixels.height; i++) {
-            for (var j = 0; j < imgPixels.width; j++) {
-                var index = getIndexFromPos(j,i);//(i * 4) * imgPixels.width + j * 4;
-                var bitsInx = index / 4;
-                if (bits[bitsInx] == 0) {
-                    fillGaps(j, i, bitsInx);
+
+
+        while (numberOfsmoothIteration !=0 ) {
+            numberOfsmoothIteration --
+            for (var i = 0; i < imgPixels.height; i++) {
+                for (var j = 0; j < imgPixels.width; j++) {
+                    var index = getIndexFromPos(j, i);//(i * 4) * imgPixels.width + j * 4;
+                    var bitsInx = index / 4;
+                    if (bits[bitsInx] == 0) {
+                        fillGaps(j, i, bitsInx);
+                    }
                 }
             }
+            drowImg(cxt, imgPixels);
         }
 
+            
         function fillGaps(x, y, bitsInx) {
             //if 2 or more more white sroundeded  
-            var sumOfWhites = isWhite(x-1 , y-1) +
-                isWhite(x, y-1  ) +
-                isWhite(x+1, y-1) +
-                isWhite(x- 1, y ) +
-                isWhite(x+1, y) +
-                isWhite(x- 1, y+1) +
-                isWhite(x, y+1) +
-                isWhite(x+1, y+1);
+            var sumOfWhites =   isWhite(x-1 , y-1 ) +
+                                isWhite(x,    y-1 ) +
+                                isWhite(x+1,  y-1 ) +
+                                isWhite(x- 1, y   ) +
+                                isWhite(x+1,  y   ) +
+                                isWhite(x- 1, y+1 ) +
+                                isWhite(x,    y+1 ) +
+                                isWhite(x+1,  y+1 );
 
-            if (sumOfWhites >= 4){
-                //bits[bitsInx] = 1; // set white
+            if (sumOfWhites >= smootThreshold){
+                bits[bitsInx] = 1; // set white
+                imgPixels.data[bitsInx * 4    ] = 255;
+                imgPixels.data[bitsInx * 4 + 1] = 0;
+                imgPixels.data[bitsInx * 4 + 2] = 0;
             }
         }
 
         function isWhite(x,y) {
             return bits[getIndexFromPos(x, y) / 4] == 1 ? 1:0;
         }
+
+
+        
         
 
 
@@ -122,7 +125,7 @@
             imgPixels.data[i + 2] = avg;
 
         }
-        cxt.putImageData(imgPixels, 0, 0, 0, 0, imgPixels.width, imgPixels.height);
+        drowImg(cxt, imgPixels);
 
         
         
@@ -190,7 +193,6 @@
                 }
             }
             if (!foundMatch){
-                console.log(1,x,y);
                 matchList.push([{
                     x: x,
                     y: y
@@ -199,7 +201,7 @@
             
         } 
 
-        cxt.putImageData(imgPixels, 0, 0, 0, 0, imgPixels.width, imgPixels.height);
+        drowImg(cxt, imgPixels);
 
 
         // Display each groups with diff colors
@@ -210,21 +212,25 @@
                 for (var j in item) {
                     var pos = item[j];
                     var ind = getIndexFromPos(pos.x, pos.y);
-                    imgPixels.data[ind] = colors[i%12][0];
-                    imgPixels.data[ind + 1] = colors[i%12][1];
-                    imgPixels.data[ind + 2] = colors[i%12][2]; 
+                    imgPixels.data[ind] = colors[i%2][0];
+                    imgPixels.data[ind + 1] = colors[i%2][1];
+                    imgPixels.data[ind + 2] = colors[i%2][2]; 
                 }
             }
         }
         
-        console.log('groups count', matchList.length);
-        cxt.putImageData(imgPixels, 0, 0, 0, 0, imgPixels.width, imgPixels.height);
+        console.log('groups count', matchList.length, matchList);
+        drowImg(cxt, imgPixels);
 
+
+        matchList = matchList.filter(function name(a) {
+            return (a.length > ignoreNoicePixcelsIflessersize && a.length < 1000);
+        })
 
         // mergigng nearset groups 
 
         var rectEdges = matchList.map(function (a) {
-            if(a.length>1000) return;
+            
 
             var temp = {
                 minX: a[0].x,
@@ -279,30 +285,40 @@
                 r2.maxY < r1.minY);
         }
 
+        matchList = matchList.filter(function (a) {
+            return !!a;
+        })
+
+        //wipeout
+        for(var i in bits){
+            imgPixels.data[i*4] = 0;
+            imgPixels.data[i*4+1] = 0;
+            imgPixels.data[i*4+2] = 0;
+        };
 
         for (var i in matchList) {
             var item = matchList[i];
             if (item) {
                 for (var j in item) {
                     var pos = item[j];
-                    var ind = getIndexFromPos(pos.x, pos.y);
-                    imgPixels.data[ind] = colors[i % 12][0];
-                    imgPixels.data[ind + 1] = colors[i % 12][1];
-                    imgPixels.data[ind + 2] = colors[i % 12][2];
+                    if (pos){
+                        var ind = getIndexFromPos(pos.x, pos.y);
+                        imgPixels.data[ind] = colors[i % 2][0];
+                        imgPixels.data[ind + 1] = colors[i % 2][1];
+                        imgPixels.data[ind + 2] = colors[i % 2][2];
+                    }
                 }
             }
         }
-
-        matchList = matchList.filter(function (a) {
-            return !!a;
-        })
-        console.log('length after mergging close groups',matchList.length);
-        cxt.putImageData(imgPixels, 0, 0, 0, 0, imgPixels.width, imgPixels.height);
-
         
-        
+        console.log('length after mergging close groups', matchList.length, matchList);
+        drowImg(cxt, imgPixels);
 
     }
 
+    function drowImg(cxt, imgPixels) {
+        //alert('OK')
+        cxt.putImageData(imgPixels, 0, 0, 0, 0, imgPixels.width, imgPixels.height);
+    }
 
 })();
